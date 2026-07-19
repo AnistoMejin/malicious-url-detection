@@ -1,0 +1,96 @@
+MALICIOUS URL DETECTION - HOW TO RUN
+====================================
+
+Everything needed to run is inside this zip: the source code, the full 651,191-row
+dataset, and the already-trained model. You do NOT need to download anything.
+
+WHY THERE IS NO .venv FOLDER IN THIS ZIP
+----------------------------------------
+A Python virtual environment is not portable. It hard-codes absolute paths from
+the machine that created it and contains Windows-only compiled binaries, so
+copying it to another computer does not work - it fails with confusing errors.
+The correct approach on a new machine is to create a fresh one, which is step 1
+below and takes about a minute. Nothing else has been left out.
+
+
+STEP 1 - CREATE THE ENVIRONMENT AND INSTALL PACKAGES
+-----------------------------------------------------
+Requires Python 3.10 or newer (check with:  python --version)
+
+Windows (Command Prompt or PowerShell):
+
+    cd malicious-url-detection
+    python -m venv .venv
+    .venv\Scripts\python.exe -m pip install -r requirements.txt
+
+macOS / Linux:
+
+    cd malicious-url-detection
+    python3 -m venv .venv
+    .venv/bin/python -m pip install -r requirements.txt
+
+
+STEP 2 - RUN THE WEB APPLICATION
+---------------------------------
+Windows:      .venv\Scripts\python.exe app.py
+macOS/Linux:  .venv/bin/python app.py
+
+Then open http://localhost:5000 in a browser.
+
+The trained model is already included in model_cache/, so the app starts in a few
+seconds. Type a URL into the box and press Analyze.
+
+Try these:
+    github.com                                       -> Benign
+    en.wikipedia.org/wiki/Machine_learning           -> Benign
+    104.211.28.157/powerpc                           -> Malicious
+    paypal-secure-login.verify-account.tk/webscr     -> Malicious
+
+To use a different port:
+    Windows:      set PORT=5077 && .venv\Scripts\python.exe app.py
+    macOS/Linux:  PORT=5077 .venv/bin/python app.py
+
+
+STEP 3 (OPTIONAL) - RETRAIN THE MODEL YOURSELF
+-----------------------------------------------
+Windows:      .venv\Scripts\python.exe train.py
+macOS/Linux:  .venv/bin/python train.py
+
+This reads data/malicious_phish.csv and takes roughly 2-4 minutes. It overwrites
+model_cache/model.joblib and prints the accuracy, precision, recall, F1 score,
+confusion matrix and feature importances.
+
+
+STEP 4 (OPTIONAL) - RUN THE TESTS
+----------------------------------
+Windows:      .venv\Scripts\python.exe -m pytest tests/ -q
+macOS/Linux:  .venv/bin/python -m pytest tests/ -q
+
+All 36 tests should pass.
+
+
+WHAT IS IN THIS FOLDER
+-----------------------
+    app.py                      Flask web app and JSON API
+    features.py                 extracts the 30 URL features
+    train.py                    training pipeline
+    templates/index.html        the web page
+    tests/test_project.py       36 automated tests
+    requirements.txt            exact package versions
+    README.md                   full documentation and results
+    SETUP.txt                   this file
+    data/malicious_phish.csv    the dataset, 651,191 labelled URLs (44 MB)
+    model_cache/model.joblib    the trained model, ready to use (113 MB)
+    screenshots/                screenshots of the running application
+
+
+MEASURED RESULTS (held-out test set of 45,315 URLs)
+----------------------------------------------------
+    Accuracy   89.43%
+    Precision  86.56%
+    Recall     81.16%
+    F1 score   83.78%
+
+Note: the URL is only ever analysed as text. The application never opens,
+downloads or connects to any address you type in, so pasting a suspected
+malicious URL is safe.

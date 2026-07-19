@@ -21,15 +21,33 @@ of scope for this project.
 - **Source:** https://www.kaggle.com/datasets/sid321axn/malicious-urls-dataset
 - **File:** `data/malicious_phish.csv`
 
-The 44 MB CSV is not committed to git. Fetch it before the first run:
+The 44 MB CSV is not committed to git, so a fresh `git clone` will NOT run until
+you fetch it. Without this step `train.py` and `app.py` both fail with
+`FileNotFoundError: data/malicious_phish.csv`.
+
+**Windows (PowerShell)** - paste as ONE line:
+
+```powershell
+New-Item -ItemType Directory -Force data | Out-Null; Invoke-WebRequest -Uri "https://www.kaggle.com/api/v1/datasets/download/sid321axn/malicious-urls-dataset" -OutFile data\kaggle.zip; Expand-Archive data\kaggle.zip -DestinationPath data -Force; Remove-Item data\kaggle.zip; Get-ChildItem data
+```
+
+Do not use `curl -sL -o ...` in PowerShell: `curl` there is an alias for
+`Invoke-WebRequest`, which does not accept those flags, and `unzip` does not
+exist on Windows.
+
+**macOS / Linux:**
 
 ```bash
+mkdir -p data
 curl -sL -o data/kaggle.zip https://www.kaggle.com/api/v1/datasets/download/sid321axn/malicious-urls-dataset
 unzip -o data/kaggle.zip -d data && rm data/kaggle.zip
 ```
 
-The trained model (`model_cache/`, ~571 MB) is not committed either - run
-`python train.py` to regenerate it.
+You should end up with `data/malicious_phish.csv` (about 45.7 MB, 651,192 lines
+including the header).
+
+The trained model (`model_cache/`) is not committed either - run
+`python train.py` to regenerate it. It is roughly 113 MB once saved.
 - **Rows:** 651,191
 - **Columns:** `url,type`
 
@@ -82,19 +100,29 @@ project can be moved or cloned to any directory.
 
 Requires **Python 3**. Only pandas, numpy, scikit-learn, joblib and flask are used.
 
-From the project root (`C:\User\Anisto\Project\malicious-url-detection`):
+From the project root, run each line separately.
+
+**Windows (PowerShell):**
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe app.py
 ```
 
-Run the web app:
+**macOS / Linux:**
 
-```powershell
-python app.py
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python app.py
 ```
+
+Calling `.venv\Scripts\python.exe` directly avoids having to activate the
+environment, which on Windows can be blocked by the PowerShell execution policy.
+
+The first run trains the model if `model_cache/model.joblib` is absent, which
+takes 2-4 minutes. Later runs load the cached model and start immediately.
 
 Then open http://127.0.0.1:5000 in a browser.
 
