@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Trained model bundle - ~571 MB, far over GitHub's 100 MB file limit.
+# Regenerate with: python train.py
+model_cache/
+
+# The dataset is 44 MB and freely downloadable from Kaggle.
+# See README for the one-line download command.
+data/*.csv
+data/*.zip

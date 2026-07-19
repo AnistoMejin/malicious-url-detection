@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Malicious URL Detection - Machine Learning</title>
+<style>
+  body {
+    font-family: -apple-system, "Segoe UI", Arial, sans-serif;
+    font-size: 15px;
+    color: #111;
+    background: #fff;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+    line-height: 1.5;
+  }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  h2 { font-size: 17px; margin-top: 28px; margin-bottom: 8px; }
+  .metrics {
+    font-size: 14px;
+    color: #333;
+    border: 1px solid #ccc;
+    padding: 8px;
+    margin-bottom: 20px;
+    background: #f7f7f7;
+  }
+  input[type="text"] {
+    width: 100%;
+    padding: 6px;
+    font-size: 14px;
+    font-family: monospace;
+    border: 1px solid #999;
+    box-sizing: border-box;
+  }
+  textarea {
+    width: 100%;
+    height: 130px;
+    padding: 6px;
+    font-size: 14px;
+    font-family: monospace;
+    border: 1px solid #999;
+    box-sizing: border-box;
+  }
+  button {
+    margin-top: 8px;
+    padding: 6px 14px;
+    font-size: 14px;
+    border: 1px solid #666;
+    background: #eee;
+    cursor: pointer;
+  }
+  button:hover { background: #ddd; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-top: 10px;
+    font-size: 14px;
+  }
+  th, td {
+    border: 1px solid #ccc;
+    padding: 5px 8px;
+    text-align: left;
+  }
+  th { background: #f0f0f0; }
+  td.url { font-family: monospace; word-break: break-all; }
+  .malicious { color: #b00000; font-weight: bold; }
+  .benign { color: #007000; font-weight: bold; }
+  .error {
+    color: #b00000;
+    border: 1px solid #b00000;
+    background: #fff0f0;
+    padding: 8px;
+    margin-top: 10px;
+  }
+  .result-box {
+    border: 1px solid #ccc;
+    padding: 10px;
+    margin-top: 10px;
+  }
+  .note { font-size: 13px; color: #555; }
+  hr { border: 0; border-top: 1px solid #ddd; margin: 26px 0; }
+</style>
+</head>
+<body>
+
+<h1>Malicious URL Detection - Machine Learning</h1>
+
+<div class="metrics">
+  Model performance:
+  Accuracy {{ "%.2f"|format(metrics.accuracy*100) }}% |
+  Precision {{ "%.2f"|format(metrics.precision*100) }}% |
+  Recall {{ "%.2f"|format(metrics.recall*100) }}% |
+  F1 {{ "%.2f"|format(metrics.f1*100) }}%
+  (train {{ metrics.n_train }} / test {{ metrics.n_test }})
+</div>
+
+<p class="note">URLs are classified as text only. Nothing is fetched or opened over the network.</p>
+
+<h2>Single URL</h2>
+<label for="single-url">Enter a URL:</label>
+<input type="text" id="single-url" placeholder="http://example.com/login.php">
+<button id="analyze-btn" type="button">Analyze</button>
+<div id="single-result"></div>
+
+<hr>
+
+<h2>Batch Mode</h2>
+<label for="batch-urls">One URL per line:</label>
+<textarea id="batch-urls" placeholder="http://example.com&#10;http://another-site.net/path"></textarea>
+<button id="analyze-all-btn" type="button">Analyze All</button>
+<div id="batch-result"></div>
+
+<script>
+function esc(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function verdictHtml(prediction) {
+  var cls = (prediction === "Malicious") ? "malicious" : "benign";
+  return '<span class="' + cls + '">' + esc(prediction) + '</span>';
+}
+
+function pct(x) {
+  return (Number(x) * 100).toFixed(2) + "%";
+}
+
+function showError(el, msg) {
+  el.innerHTML = '<div class="error">' + esc(msg) + '</div>';
+}
+
+function topFeaturesTable(feats) {
+  if (!feats || feats.length === 0) {
+    return "";
+  }
+  var html = "<table><tr><th>Feature</th><th>Value</th></tr>";
+  for (var i = 0; i < feats.length; i++) {
+    var f = feats[i];
+    var name, value;
+    if (Array.isArray(f)) {
+      name = f[0];
+      value = f[1];
+    } else if (f && typeof f === "object") {
+      name = (f.name !== undefined) ? f.name : (f.feature !== undefined ? f.feature : "");
+      value = (f.value !== undefined) ? f.value : (f.importance !== undefined ? f.importance : "");
+    } else {
+      name = String(f);
+      value = "";
+    }
+    html += "<tr><td>" + esc(name) + "</td><td>" + esc(value) + "</td></tr>";
+  }
+  html += "</table>";
+  return html;
+}
+
+function analyzeSingle() {
+  var out = document.getElementById("single-result");
+  var url = document.getElementById("single-url").value.trim();
+  if (!url) {
+    showError(out, "Please enter a URL.");
+    return;
+  }
+  out.innerHTML = "<p>Analyzing...</p>";
+
+  fetch("/api/predict", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({url: url})
+  }).then(function (resp) {
+    if (!resp.ok) {
+      return resp.text().then(function (t) {
+        throw new Error("Request failed (HTTP " + resp.status + "). " + t);
+      });
+    }
+    return resp.json();
+  }).then(function (data) {
+    var html = '<div class="result-box">';
+    html += "<p>URL: <span class=\"url\">" + esc(data.url) + "</span></p>";
+    html += "<p>Prediction: " + verdictHtml(data.prediction) + "</p>";
+    html += "<p>Confidence: " + pct(data.confidence) + "</p>";
+    var tbl = topFeaturesTable(data.top_features);
+    if (tbl) {
+      html += "<p>Top features:</p>" + tbl;
+    }
+    html += "</div>";
+    out.innerHTML = html;
+  }).catch(function (err) {
+    showError(out, "Error: " + err.message);
+  });
+}
+
+function analyzeBatch() {
+  var out = document.getElementById("batch-result");
+  var raw = document.getElementById("batch-urls").value;
+  var urls = raw.split("\n").map(function (s) { return s.trim(); })
+                .filter(function (s) { return s.length > 0; });
+  if (urls.length === 0) {
+    showError(out, "Please enter at least one URL.");
+    return;
+  }
+  out.innerHTML = "<p>Analyzing " + urls.length + " URLs...</p>";
+
+  fetch("/api/predict_batch", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({urls: urls})
+  }).then(function (resp) {
+    if (!resp.ok) {
+      return resp.text().then(function (t) {
+        throw new Error("Request failed (HTTP " + resp.status + "). " + t);
+      });
+    }
+    return resp.json();
+  }).then(function (data) {
+    var results = data.results || [];
+    if (results.length === 0) {
+      out.innerHTML = "<p>No results returned.</p>";
+      return;
+    }
+    var html = "<table><tr><th>#</th><th>URL</th><th>Prediction</th><th>Confidence</th></tr>";
+    for (var i = 0; i < results.length; i++) {
+      var r = results[i];
+      html += "<tr><td>" + (i + 1) + "</td>";
+      html += '<td class="url">' + esc(r.url) + "</td>";
+      html += "<td>" + verdictHtml(r.prediction) + "</td>";
+      html += "<td>" + pct(r.confidence) + "</td></tr>";
+    }
+    html += "</table>";
+    out.innerHTML = html;
+  }).catch(function (err) {
+    showError(out, "Error: " + err.message);
+  });
+}
+
+document.getElementById("analyze-btn").addEventListener("click", analyzeSingle);
+document.getElementById("analyze-all-btn").addEventListener("click", analyzeBatch);
+document.getElementById("single-url").addEventListener("keydown", function (e) {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    analyzeSingle();
+  }
+});
+</script>
+
+</body>
+</html>
